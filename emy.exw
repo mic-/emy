@@ -1,0 +1,144 @@
+/*
+ * Emy - A YM player for Windows
+ *
+ * Only uncompressed YM files are supported.
+ *
+ * Mic, 2019
+ */
+
+include ym_emu.e
+include ewin32api.ew
+include bass.ew
+include std/os.e
+
+constant SONG = "songs/VE2.ym"
+
+enum UNDEFINED, INITED, STARTED, PLAYING
+integer bassState = UNDEFINED
+
+enum REQUESTED, ACKNOWLEDGED
+
+atom ymData = 0
+atom hstream = 0
+atom mutex = 0
+integer quit = 0
+
+
+procedure cleanup()    
+    if bassState = STARTED or bassState = PLAYING then
+        c_func(BASS_Stop, {})
+        bassState = INITED
+    end if
+    if bassState = INITED then
+        c_func(BASS_Free, {})
+        bassState = UNDEFINED
+    end if
+ 
+    if ymData then
+        free(ymData)
+        ymData = 0
+    end if
+    
+    if mutex then
+        c_func(CloseHandleC, {mutex})
+        mutex = 0
+    end if
+end procedure
+
+
+procedure error(sequence msg)
+    puts(1, msg & "\n")
+    cleanup()
+    abort(1)   
+end procedure
+
+
+procedure load_ym(sequence fname)
+    puts(1, "Loading YM file.. ")
+    
+    integer fn = open(fname, "rb")
+    if fn = -1 then
+        error("Failed to open file: " & fname)
+    end if
+    sequence data = {}
+    while 1 do
+        integer b = getc(fn)
+        if b = -1 then exit end if
+        data &= b
+    end while
+    close(fn)
+    
+    if length(data) = 0 then
+        error("File is empty")
+    end if
+    
+    ymData = allocate(length(data))
+    if ymData = 0 then
+        error("Failed to allocate memory for YM data")
+    end if
+    poke(ymData, data)
+    
+    ym_emu_init(ymData)
+    
+    puts(1, "done\n")
+end procedure
+
+
+procedure start_playback()
+    puts(1, "Starting playback.. ")
+
+    mutex = c_func(CreateMutexC, {0, 0, 0})
+
+    if not c_func(BASS_Init, {-1, SAMPLE_RATE, BASS_DEVICE_MONO, 0, 0}) then
+        error(sprintf("Failed to initialize audio device: error code = %d", c_func(BASS_ErrorGetCode, {})))
+    end if
+    bassState = INITED
+
+    hstream = c_func(BASS_StreamCreate, {SAMPLE_RATE, 1, BASS_STREAM_AUTOFREE, call_back(routine_id("streamproc")), 0})
+    if not hstream then
+        error(sprintf("Failed to create audio stream: error code = %d", c_func(BASS_ErrorGetCode, {})))
+    end if
+
+    if c_func(BASS_SetVolume, {0.14}) then end if
+
+    if not c_func(BASS_ChannelPlay, {hstream, 0}) then
+        error(sprintf("Failed to start audio stream: error code = %d", c_func(BASS_ErrorGetCode, {})))
+    end if
+    bassState = PLAYING
+    
+    puts(1, "done\n")
+end procedure
+
+
+function streamproc(atom handle, atom buffer, integer bytesToWrite, atom userData)
+    WaitForSingleObject(mutex, 2000)
+
+    if quit = REQUESTED then
+        quit = ACKNOWLEDGED
+        ReleaseMutex(mutex)
+        return BASS_STREAMPROC_END
+    end if
+
+    ym_emu_run(floor(bytesToWrite / 2), buffer)
+    ReleaseMutex(mutex)
+
+    return bytesToWrite
+end function
+
+
+puts(1, "Emy - A YM player\n")
+puts(1, "Mic, 2019\n\n")
+
+load_ym(SONG)
+start_playback()
+
+puts(1, "Playing " & ymSongAuthor & " - " & ymSongTitle & "\n\nPress any key to quit..")
+
+while quit != ACKNOWLEDGED do
+    if get_key() != -1 then
+        quit = REQUESTED
+    end if
+    os:sleep(0.16)
+end while
+
+cleanup()    

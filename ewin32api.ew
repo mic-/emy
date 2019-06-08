@@ -1,0 +1,853 @@
+-- ewin32api.ew for use with the
+-- EXOTICA dll
+-- (c)1999 Todd Riggins
+--
+-- This file sets up needed win32 functions and variables for use with the
+-- EXOTICA dll.
+
+-- 1906: Added GetForegroundWindow and some mutex-related functions, and replaced or_all with math:or_all
+-- 0003: Added functions + constants for OpenGL programming
+-- /Mic
+
+
+
+include machine.e
+include dll.e
+include get.e
+include msgbox.e
+include std/math.e
+
+-- funcres holds returned function values
+atom funcval
+
+export constant lpcstr = allocate(129)  -- make room for 128 CHARs + NULL terminator
+
+global function LOWORD(object o)        --return the low word of an atom/integer as an integer
+    integer i
+    i = and_bits(o,#FFFF)
+    return i
+end function
+
+global function HIWORD(object o)        --return the high word of an atom/integer as an integer
+    integer i
+    i = and_bits(floor(o/#10000),#FFFF)
+    return i
+end function
+
+
+--define some GL types
+global constant GLbyte  = C_CHAR,
+        GLubyte     = C_UCHAR,
+        GLshort     = C_SHORT,
+        GLushort    = C_USHORT,
+        GLenum      = C_UINT,
+        GLint       = C_INT,
+        GLuint      = C_UINT,
+        GLsizei     = C_INT,
+        GLbitfield  = C_UINT,
+        GLdouble    = C_DOUBLE
+--/GL types
+
+
+-- Structure of WNDCLASS
+global constant cbSize    = 0,
+         style            = 4,
+         lpfnWndProc      = 8,
+         cbClsExtra       = 12,
+         cbWndExtra       = 16,
+         hInstance        = 20,
+         hIcon            = 24,
+         hCursor          = 28,
+         hbrBackground    = 32,
+         lpszMenuName     = 36,
+         lpszClassName    = 40,
+         hIconSm          = 44,
+         SIZE_OF_WNDCLASS = 48
+
+-- STRUCT PIXELFORMATDESCRIPTOR
+global constant nSize				= 0,
+                nVersion			= 2,
+                dwFlags				= 4,
+                iPixelType			= 8,
+                cColorBits			= 9,
+                cRedBits			= 10,
+                cRedShift			= 11,
+                cGreenBits			= 12,
+                cGreenShift			= 13,
+                cBlueBits			= 14,
+                cBlueShift			= 15,
+                cAlphaBits			= 16,
+                cAlphaShift			= 17,
+                cAccumBits			= 18,
+                cAccumRedBits			= 19,
+                cAccumGreenBits			= 20,
+                cAccumBlueBits			= 21,
+                cAccumAlphaBits			= 22,
+                cDepthBits			= 23,
+                cStencilBits			= 24,
+                cAuxBuffers			= 25,
+                iLayerType			= 26,
+                bReserved			= 27,
+                dwLayerMask			= 28,
+                dwVisibleMask			= 32,
+                dwDamageMask			= 36,
+                SIZE_OF_PIXELFORMATDESCRIPTOR 	= 40
+--END STRUCT
+
+
+global constant
+    ofn_lStructSize=0,
+    ofn_hwndOwner=4,
+    ofn_hInstance=8,
+    ofn_lpstrFilter=12,
+    ofn_lpstrCustomFilter=16,
+    ofn_nMaxCustFilter=20,
+    ofn_nFilterIndex=24,
+    ofn_lpstrFile=28,
+    ofn_nMaxFile=32,
+    ofn_lpstrFileTitle=36,
+    ofn_nMaxFileTitle=40,
+    ofn_lpstrInitialDir=44,
+    ofn_lpstrTitle=48,
+    ofn_Flags=52,
+    ofn_nFileOffset=56,
+    ofn_nFileExtension=58,
+    ofn_lpstrDefExt=60,
+    ofn_lCustData=64,
+    ofn_lpfnHook=68,
+    ofn_lpTemplateName=72,
+    SIZE_OF_OPENFILENAME = 76
+
+
+
+--STRUCT PAINTSTRUCT
+global constant  ps_hdc			= 0,
+                 ps_fErase		= 4,
+                 ps_rcPaint		= 8,	-- (RECT = { LONG left,top,right,bottom })
+                 ps_fRestore		= 24,
+                 ps_fIncUpdate		= 28,
+                 ps_rgbReserved		= 32,	-- (32 bytes)
+                 SIZE_OF_PAINTSTRUCT	= 64
+--END STRUCT
+ 
+--STRUCT BITMAPINFOHEADER
+global constant
+    biSize      = 0,
+    biWidth     = 4,
+    biHeight    = 8,
+    biPlanes    = 12,
+    biBitCount  = 14,
+    biCompression   = 16,
+    biSizeImage = 20,
+    biXPelsPerMeter	= 24,
+    biYPelsPerMeter	= 28,
+    biClrUsed   = 32,
+    biClrImportant  = 36,
+    SIZE_OF_BITMAPINFOHEADER = 40
+--END STRUCT
+
+--STRUCT RGBQUAD
+global constant
+    rgbBlue		= 0,
+    rgbGreen	= 1,
+    rgbRed		= 2,
+    rgbReserved	= 3,
+    SIZE_OF_RGBQUAD	= 4
+--END STRUCT
+
+--STRUCT BITMAPINFO
+global constant
+    BITMAPINFOHEADER = 0,
+    RGBQUAD		 = 40,
+    SIZE_OF_BITMAPINFO = SIZE_OF_BITMAPINFOHEADER + SIZE_OF_RGBQUAD
+--END STRUCT
+
+--STRUCT RECT
+global constant
+    rect_left       = 0,
+    rect_top        = 4,
+    rect_right      = 8,
+    rect_bottom     = 12,
+    SIZE_OF_RECT    = 16
+--END STRUCT
+
+
+global constant SIZE_OF_MESSAGE = 40
+
+
+global constant
+    BI_RGB 		= 0,
+    BI_RLE8 	= 1,
+    BI_RLE4 	= 2,
+    BI_BITFIELDS 	= 3
+
+global constant
+    DIB_PAL_COLORS	= 1,
+    DIB_RGB_COLORS	= 0
+
+global constant
+    SRCINVERT	= #660046,
+    SRCAND		= #8800C6,
+    MERGEPAINT	= #BB0226,
+    MERGECOPY	= #C000CA,
+    SRCCOPY		= #CC0020,
+    SRCPAINT	= #EE0086
+
+
+-- Class styles
+global constant
+    CS_HREDRAW = 2,
+    CS_VREDRAW = 1,
+    CS_OWNDC = 32,
+
+    IDC_ARROW	= 32512,
+    IDC_IBEAM	= 32513,
+    IDC_WAIT	= 32514,
+    IDC_CROSS	= 32515,
+    IDC_UPARROW	= 32516,
+    IDC_SIZENWSE	= 32642,
+    IDC_SIZENESW	= 32643,
+    IDC_SIZEWE	= 32644,
+    IDC_SIZENS	= 32645,
+    IDC_SIZEALL	= 32646,
+    IDC_NO		= 32648,
+    IDC_APPSTARTING	= 32650,
+    IDC_HELP	= 32651,
+    IDI_APPLICATION	= 32512,
+    IDI_HAND	= 32513,
+    IDI_QUESTION	= 32514,
+    IDI_EXCLAMATION	= 32515,
+    IDI_ASTERISK	= 32516,
+    IDI_WINLOGO	= 32517
+
+
+
+
+global constant PFD_DOUBLEBUFFER 	= 1,
+                PFD_STEREO 		= 2,
+                PFD_DRAW_TO_WINDOW 	= 4,
+                PFD_DRAW_TO_BITMAP 	= 8,
+                PFD_SUPPORT_GDI 	= #10,
+                PFD_SUPPORT_OPENGL 	= #20,
+                PFD_GENERIC_FORMAT 	= #40,
+                PFD_NEED_PALETTE 	= #80,
+                PFD_NEED_SYSTEM_PALETTE = #100,
+                PFD_SWAP_EXCHANGE 	= #200,
+                PFD_SWAP_COPY 		= #400,
+                PFD_SWAP_LAYER_BUFFERS 	= #800,
+                PFD_GENERIC_ACCELERATED	= #1000,
+                PFD_TYPE_RGBA 		= 0,
+                PFD_TYPE_COLORINDEX 	= 1,
+                PFD_MAIN_PLANE 		= 0,
+                PFD_OVERLAY_PLANE 	= 1,
+                PFD_UNDERLAY_PLANE 	= (-1)
+
+
+
+-- ShowWindow() Commands
+global constant SW_SHOW = 5
+
+-- GetSystemMetrics() codes
+--global constant SM_CXSCREEN = 0,
+--                SM_CYSCREEN = 1
+
+-- PeekMessage() Options
+global constant PM_NOREMOVE = #0000
+
+-- Stock Logical Objects
+global constant NULL_BRUSH = 5,
+                BLACK_BRUSH = 4 
+
+
+-- Window Messages
+global constant WM_DESTROY     = #0002,
+                WM_ACTIVATEAPP = #001C,
+                WM_SETCURSOR   = #0020,
+                WM_KEYDOWN     = #0100,
+                WM_KEYUP       = #0101,
+                WM_PAINT       = #000F,
+                WM_SIZE        = #0005,
+                WM_CLOSE       = #0010,
+                WM_CREATE      = #0001,
+                WM_SHOWWINDOW  = #0018,
+                WM_COMMAND     = 273,
+
+                WM_MOUSEMOVE = 512,
+                WM_LBUTTONDOWN = 513,
+                WM_LBUTTONUP = 514,
+                WM_RBUTTONDOWN = 516,
+                WM_RBUTTONUP = 517
+
+
+global constant HWND_TOP=0,
+                HWND_TOPMOST=-1
+
+
+global constant OFN_EXPLORER=#80000,
+                OFN_FILEMUSTEXIST=#1000  
+
+               
+global constant  MF_BITMAP=4,
+ MF_CHECKED=8,
+ MF_DISABLED=2,
+ MF_ENABLED=0,
+ MF_GRAYED=1,
+ MF_MENUBARBREAK=32,
+ MF_MENUBREAK=64,
+ MF_OWNERDRAW=256,
+ MF_POPUP=16,
+ MF_SEPARATOR=#800,
+ MF_STRING=0,
+ MF_UNCHECKED=0,
+ MF_DEFAULT=4096,
+ MF_SYSMENU=#2000,
+ MF_HELP=#4000,
+ MF_END=128,
+ MF_RIGHTJUSTIFY=#4000,
+ MF_MOUSESELECT=#8000
+
+
+-- Virtual Keys, Standard Set
+global constant VK_ESCAPE = #1B
+
+-- PALETTEENTRY flags 
+
+global constant PC_RESERVED     = #01    -- palette index used for animation 
+global constant PC_NOCOLLAPSE   = #04    -- do not match color to system palette 
+
+-- EXOTICA needs both PC_RESERVED and PC_NOCOLLAPSE, so I or_all them
+-- into a specially needed flag for easy use
+global constant PE_FLAGS = math:or_all({PC_RESERVED, PC_NOCOLLAPSE})
+
+
+-- Window Styles
+global constant WS_OVERLAPPED  = #00000000,
+                WS_POPUP       = #80000000,
+                WS_CAPTION     = #00C00000,   
+                WS_SYSMENU     = #00080000,
+                WS_THICKFRAME  = #00040000,
+                WS_MINIMIZEBOX = #00020000,
+                WS_MAXIMIZEBOX = #00010000, 
+                WS_OVERLAPPEDWINDOW = math:or_all({WS_OVERLAPPED, WS_CAPTION, WS_SYSMENU,
+                                  WS_THICKFRAME, WS_MINIMIZEBOX, WS_MAXIMIZEBOX}),
+        WS_CHILDWINDOW  = #40000000,
+        WS_CLIPCHILDREN = #2000000,
+        WS_CLIPSIBLINGS = #4000000,
+        WS_GLWINDOW = math:or_all({          -- home-made window style
+                            WS_OVERLAPPEDWINDOW,
+                            WS_CLIPSIBLINGS,
+                            WS_CLIPCHILDREN
+                        })
+                                     
+
+-- System Metrics
+global constant SM_CXSCREEN = 0,
+        SM_CYSCREEN     = 1,
+        SM_CXVSCROLL    = 2,
+        SM_CYHSCROLL    = 3,
+        SM_CYCAPTION    = 4,
+        SM_CXBORDER     = 5,
+        SM_CYBORDER     = 6,
+        SM_CXDLGFRAME   = 7,
+        SM_CYDLGFRAME   = 8,
+        SM_CYVTHUMB     = 9,
+        SM_CXHTHUMB     = 10,
+        SM_CXICON       = 11,
+        SM_CYICON       = 12,
+        SM_CXCURSOR     = 13,
+        SM_CYCURSOR     = 14,
+        SM_CYMENU       = 15,
+        SM_CXFULLSCREEN = 16,
+        SM_CYFULLSCREEN = 17
+-- /System Metrics
+
+
+
+-- Extended Window Styles
+global constant WS_EX_TOPMOST = #00000008,
+                WS_EX_OVERLAPPEDWINDOW = #300
+
+-- CreateFont Weight values
+global constant 
+    FW_DONTCARE	=		0,
+    FW_THIN =			100,
+    FW_EXTRALIGHT =		200,
+    FW_LIGHT =			300,
+    FW_NORMAL =			400,
+    FW_MEDIUM =			500,
+    FW_SEMIBOLD =		600,
+    FW_BOLD =			700,
+    FW_EXTRABOLD =		800,
+    FW_HEAVY =			900
+
+-- CreateFont Character Set 
+global constant
+ ANSI_CHARSET          =  0,
+ DEFAULT_CHARSET       =  1,
+ SYMBOL_CHARSET        =  2,
+ SHIFTJIS_CHARSET      =  128,
+ HANGEUL_CHARSET       =  129,
+ HANGUL_CHARSET        =  129,
+ GB2312_CHARSET        =  134,
+ CHINESEBIG5_CHARSET   =  136,
+ OEM_CHARSET           =  255,
+
+ JOHAB_CHARSET         =  130,
+ HEBREW_CHARSET        =  177,
+ ARABIC_CHARSET        =  178,
+ GREEK_CHARSET         =  161,
+ TURKISH_CHARSET       =  162,
+ VIETNAMESE_CHARSET    =  163,
+ THAI_CHARSET          =  222,
+ EASTEUROPE_CHARSET    =  238,
+ RUSSIAN_CHARSET       =  204,
+ MAC_CHARSET           =  77,
+ BALTIC_CHARSET        =  186
+
+-- CreateFont Output Precision
+global constant
+ OUT_DEFAULT_PRECIS        =  0,
+ OUT_STRING_PRECIS         =  1,
+ OUT_CHARACTER_PRECIS      =  2,
+ OUT_STROKE_PRECIS         =  3,
+ OUT_TT_PRECIS             =  4,
+ OUT_DEVICE_PRECIS         =  5,
+ OUT_RASTER_PRECIS         =  6,
+ OUT_TT_ONLY_PRECIS        =  7,
+ OUT_OUTLINE_PRECIS        =  8,
+ OUT_SCREEN_OUTLINE_PRECIS =  9
+
+-- CreateFont Clip Precision
+global constant
+ CLIP_DEFAULT_PRECIS     = 0,
+ CLIP_CHARACTER_PRECIS   = 1,
+ CLIP_STROKE_PRECIS      = 2,
+ CLIP_MASK               = #F,
+ CLIP_LH_ANGLES          = 16,
+ CLIP_TT_ALWAYS          = 32,
+ CLIP_EMBEDDED           = 128
+
+-- CreateFont Quality
+global constant
+ DEFAULT_QUALITY       =  0,
+ DRAFT_QUALITY         =  1,
+ PROOF_QUALITY         =  2
+-- or_bits() with one of the following...
+global constant
+ DEFAULT_PITCH         =  0,
+ FIXED_PITCH           =  1,
+ VARIABLE_PITCH        =  2
+
+-- CreateFont Pitch and Family
+global constant
+ FF_DONTCARE         = 0,   -- (0<<4)  /* Don't care or don't know. */
+ FF_ROMAN            = 16,  -- (1<<4)  /* Variable stroke width, serifed. */
+                            --         /* Times Roman, Century Schoolbook, etc. */
+ FF_SWISS            = 32,  -- (2<<4)  /* Variable stroke width, sans-serifed. */
+                            --         /* Helvetica, Swiss, etc. */
+ -- fixed 000401   /Mic 
+ FF_MODERN           = 48, -- (3<<4)  /* Constant stroke width, serifed or sans-serifed. */
+                            --         /* Pica, Elite, Courier, etc. */
+ FF_SCRIPT           = 64,  -- (4<<4)  /* Cursive, etc. */
+ FF_DECORATIVE       = 80   -- (5<<4)  /* Old English, etc. */
+
+------------------------------------------------------
+--- Global Stuff Needed from Microsoft's Win32 API ---
+------------------------------------------------------   
+-- Setup atoms
+global integer GetSystemMetricsC, PeekMessageC, SetCursorC, LoadIconC,
+               LoadCursorC, GetStockObjectC, RegisterClassExC,
+               CreateWindowC, CreateWindowExC, ShowWindowC, UpdateWindowC,
+               TranslateMessageC, DispatchMessageC, PostQuitMessageC,
+               GetMessageC, PostMessageC, DefWindowProcC,SendMessageC,
+               GetCurrentThreadC,SetThreadPriorityC,               
+               StretchDIBitsC,
+               GetForegroundWindowC,
+
+               GetDCC,ReleaseDCC, BeginPaintC,EndPaintC, GetClientRectC,InvalidateRectC,
+               ReleaseCaptureC,SetCaptureC, DestroyWindowC,SetWindowPosC,GetOpenFileNameC,
+               ChoosePixelFormatC,DescribePixelFormatC,SetPixelFormatC,SwapBuffersC,
+               CreateMenuC,CreatePopupMenuC,AppendMenuC,SetMenuC,
+               CheckMenuItemC,GetMenuStateC,DestroyMenuC,SetWindowTextC,
+               SetFocusC,ShowCursorC,LoadBitmapC,DeleteObjectC
+        
+
+
+-- user functions/procedures
+global integer timeGetTimeC
+
+-- kernel32 routines
+global integer GetTickCountC, CreateMutexC, WaitForSingleObjectC, ReleaseMutexC, CloseHandleC
+
+-- gdi32 routines
+global integer CreateFontC
+
+
+procedure not_found(sequence name)
+       funcval = message_box("Couldn't find " & name, "FAILED!!!", MB_ICONINFORMATION+MB_TASKMODAL ) 
+       abort(1)
+end procedure
+
+global function link_c_func(atom dll, sequence name, sequence args, atom result)
+    -- dynamically link a C routine as a Euphoria function
+    integer handle
+
+    handle = define_c_func(dll, name, args, result)
+    if handle = -1 then
+        not_found(name)
+    else
+        return handle
+    end if
+end function
+
+global function link_c_proc(atom dll, sequence name, sequence args)
+    -- dynamically link a C routine as a Euphoria function
+    integer handle
+
+    handle = define_c_proc(dll, name, args)
+    if handle = -1 then
+        not_found(name)
+    else
+        return handle
+    end if
+end function
+
+procedure link_win32_dll_routines()
+    -- get handles to all dll routines that we need
+    atom user32, gdi32, winmm, kernel32,comdlg32
+
+    user32 = open_dll("user32.dll")
+    if user32 = NULL then
+        not_found("user32.dll")
+    end if
+    gdi32 = open_dll("gdi32.dll")
+    if gdi32 = NULL then
+        not_found("gdi32.dll")
+    end if
+    winmm = open_dll("winmm.dll")
+    if winmm = NULL then
+        not_found("winmm.dll")
+    end if
+    kernel32 = open_dll("kernel32.dll")
+    if kernel32 = NULL then
+        not_found("kernel32.dll")
+    end if
+    comdlg32 = open_dll("comdlg32.dll")
+    if comdlg32 = NULL then
+        not_found("comdlg32.dll")
+    end if
+
+-----------------------------------------------
+--- Stuff Needed from Microsoft's Win32 API ---
+-----------------------------------------------   
+    GetSystemMetricsC = link_c_func(user32, "GetSystemMetrics", {C_INT}, C_INT)
+    PeekMessageC = link_c_func(user32, "PeekMessageA", {C_POINTER,C_POINTER,C_UINT,C_UINT,C_UINT}, C_INT)
+    SetCursorC = link_c_func(user32, "SetCursor", {C_POINTER}, C_POINTER)
+    timeGetTimeC = link_c_func(winmm,"timeGetTime",{}, C_ULONG)
+    LoadIconC = link_c_func(user32, "LoadIconA", {C_POINTER, C_INT}, C_INT)
+    LoadCursorC = link_c_func(user32, "LoadCursorA", {C_POINTER, C_INT}, C_INT)
+    GetStockObjectC = link_c_func(gdi32, "GetStockObject", {C_INT}, C_INT)
+    RegisterClassExC = link_c_func(user32, "RegisterClassExA", {C_POINTER}, C_INT)
+    CreateWindowExC = link_c_func(user32, "CreateWindowExA", 
+     {C_INT, C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT},
+      C_INT)
+--    CreateWindowC = link_c_func(user32, "CreateWindowA", 
+--     { C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT,C_INT},
+--      C_INT)
+    CreateWindowC=CreateWindowExC
+    ShowWindowC = link_c_proc(user32, "ShowWindow", {C_INT, C_INT})
+    UpdateWindowC = link_c_proc(user32, "UpdateWindow", {C_INT})
+    GetMessageC = link_c_func(user32, "GetMessageA",{C_INT, C_INT, C_INT, C_INT}, C_INT)
+    TranslateMessageC = link_c_proc(user32, "TranslateMessage", {C_INT})
+    DispatchMessageC = link_c_proc(user32, "DispatchMessageA", {C_INT})
+    PostQuitMessageC = link_c_proc(user32, "PostQuitMessage", {C_INT})
+    PostMessageC = link_c_func(user32, "PostMessageA", {C_INT, C_UINT, C_INT, C_INT },C_INT)
+    DefWindowProcC = link_c_func(user32, "DefWindowProcA",{C_INT, C_INT, C_INT, C_INT}, C_INT)
+    GetTickCountC = link_c_func(kernel32,"GetTickCount",{},C_ULONG)
+    CreateFontC = link_c_func(gdi32,"CreateFontA",{ C_INT, C_INT, C_INT, C_INT, C_INT, C_ULONG,
+        C_ULONG, C_ULONG, C_ULONG, C_ULONG, C_ULONG, C_ULONG, C_ULONG, C_POINTER}, C_ULONG)
+    GetCurrentThreadC = link_c_func(kernel32,"GetCurrentThread",{ },C_UINT)
+    SetThreadPriorityC = link_c_func(kernel32,"SetThreadPriority",{ C_UINT,C_INT },C_INT)
+    CreateMutexC = link_c_func(kernel32, "CreateMutexA", {C_POINTER, C_INT, C_POINTER}, C_UINT)
+    ReleaseMutexC = link_c_func(kernel32, "ReleaseMutex", {C_UINT}, C_INT)
+    WaitForSingleObjectC = link_c_func(kernel32, "WaitForSingleObject", {C_UINT, C_UINT}, C_UINT)
+    CloseHandleC = link_c_func(kernel32, "CloseHandle", {C_UINT}, C_INT)
+
+-- 0003: Added functions for OpenGL programming
+
+    --USER32 functions
+    CreateMenuC = link_c_func(user32,"CreateMenu",{ },C_INT)
+    CreatePopupMenuC = link_c_func(user32,"CreatePopupMenu",{ },C_INT)
+    AppendMenuC = link_c_func(user32,"AppendMenuA",{ C_INT,C_UINT,C_UINT,C_POINTER },C_INT)
+    SetMenuC = link_c_func(user32,"SetMenu",{ C_INT,C_INT },C_INT)
+    CheckMenuItemC = link_c_func(user32,"CheckMenuItem",{ C_INT,C_INT,C_INT },C_INT)
+    GetMenuStateC = link_c_func(user32,"GetMenuState",{ C_INT,C_INT,C_INT },C_INT)
+    DestroyMenuC = link_c_func(user32,"DestroyMenu",{ C_INT },C_INT)
+    GetDCC = link_c_func(user32, "GetDC", { C_INT },C_INT)
+    ReleaseDCC = link_c_func(user32, "ReleaseDC", { C_INT,C_INT },C_INT)
+    BeginPaintC = link_c_func(user32, "BeginPaint", { C_INT,C_POINTER },C_INT)
+    EndPaintC = link_c_func(user32, "EndPaint", { C_INT,C_POINTER },C_INT)
+    GetClientRectC = link_c_func(user32, "GetClientRect", { C_INT,C_POINTER },C_INT)
+    InvalidateRectC = link_c_func(user32, "InvalidateRect", { C_INT,C_INT,C_INT },C_INT)
+    ReleaseCaptureC = link_c_func(user32, "ReleaseCapture", {  },C_INT)
+    SetCaptureC = link_c_func(user32, "SetCapture", { C_INT },C_INT)
+    SetWindowPosC = link_c_func(user32, "SetWindowPos", repeat(C_INT,6) & C_UINT,C_INT)
+    SetWindowTextC = link_c_func(user32, "SetWindowTextA", { C_INT,C_POINTER },C_INT)
+    DestroyWindowC = link_c_func(user32,"DestroyWindow",{ C_INT },C_INT)
+    SendMessageC = link_c_func(user32,"SendMessageA",{ C_INT,C_UINT,C_INT,C_INT },C_UINT)
+    SetFocusC = link_c_func(user32,"SetFocus",{ C_UINT },C_INT)
+    ShowCursorC = link_c_func(user32,"ShowCursor",{ C_UINT },C_INT)
+    LoadBitmapC = link_c_func(user32,"LoadBitmapA",{ C_UINT,C_POINTER },C_POINTER)
+    GetForegroundWindowC = link_c_func(user32, "GetForegroundWindow", {}, C_POINTER)
+    
+    --GDI32 functions
+    ChoosePixelFormatC = link_c_func(gdi32,"ChoosePixelFormat", { C_INT,C_POINTER },C_INT)
+    DescribePixelFormatC = link_c_func(gdi32,"DescribePixelFormat", { C_INT,C_INT,C_UINT,C_POINTER },C_INT)
+    SetPixelFormatC = link_c_func(gdi32,"SetPixelFormat", { C_INT,C_INT,C_POINTER },C_INT)
+    StretchDIBitsC = link_c_func(gdi32,"StretchDIBits",C_UINT & repeat(C_INT,8) & {C_POINTER,C_POINTER,C_UINT,C_UINT},C_INT)
+    SwapBuffersC = link_c_func(gdi32,"SwapBuffers", { C_INT },C_INT)
+    DeleteObjectC = link_c_func(gdi32,"DeleteObject",{ C_POINTER },C_INT)
+
+    GetOpenFileNameC = link_c_func(comdlg32,"GetOpenFileNameA", { C_POINTER },C_INT)
+
+end procedure
+
+
+link_win32_dll_routines()
+
+
+
+
+global procedure AppendMenu(integer a,object b,atom c,object text)
+    atom ORed
+    if sequence(text) then
+        poke(lpcstr,text & 0)
+        ORed = 0
+        for i = 1 to length(b) do
+            ORed = or_bits(ORed,b[i])
+        end for
+        if c_func(AppendMenuC,{ a,ORed,c,lpcstr }) then end if
+    else
+        if c_func(AppendMenuC,{ a,b,c,NULL }) then end if
+    end if
+end procedure
+
+
+global function BeginPaint(atom Hwnd,atom pPaintstruct)
+    return c_func(BeginPaintC,{ Hwnd,pPaintstruct })
+end function
+
+
+global function CheckMenuItem(atom Hmenu,atom uIDCI,atom uCh)
+    return c_func(CheckMenuItemC,{ Hmenu,uIDCI,uCh })
+end function
+
+
+global function ChoosePixelFormat(atom DC,atom PFD)
+    return c_func(ChoosePixelFormatC,{ DC,PFD })
+end function
+
+
+global function CreateMenu()
+    return c_func(CreateMenuC,{ })
+end function
+
+
+global function CreatePopupMenu()
+    return c_func(CreatePopupMenuC,{ })
+end function
+
+
+global function CreateWindow(sequence parms)
+    return c_func(CreateWindowC,parms)
+end function
+
+
+global function DefWindowProc(atom Hwnd,atom iMsg,atom wParam,atom lParam)
+    return c_func(DefWindowProcC,{ Hwnd,iMsg,wParam,lParam })
+end function
+
+
+global function DescribePixelFormat(atom DC,atom pf,atom sizeofPFD,atom PFD)
+    return c_func(DescribePixelFormatC,{ DC,pf,sizeofPFD,PFD })
+end function
+
+
+global function DestroyMenu(atom Hmenu)
+    return c_func(DestroyMenuC,{ Hmenu })
+end function
+
+
+global function DestroyWindow(atom Hwnd)
+    return c_func(DestroyWindowC,{ Hwnd })
+end function
+
+
+global procedure DispatchMessage(atom iMsg)
+    c_proc(DispatchMessageC,{ iMsg })
+end procedure
+
+
+global procedure EndPaint(atom Hwnd,atom pPaintstruct)
+    if c_func(EndPaintC,{ Hwnd,pPaintstruct }) then end if
+end procedure
+
+
+global function GetClientRect(atom Hwnd,atom pRectstruct)
+    return c_func(GetClientRectC,{ Hwnd,pRectstruct })
+end function
+
+
+global function GetCurrentThread()
+    return c_func(GetCurrentThreadC,{ })
+end function
+
+
+global function GetDC(atom Hwnd)
+    return c_func(GetDCC,{ Hwnd })
+end function
+
+
+global function GetMenuState(atom Hmenu,atom uID,atom uFlgs)
+    return c_func(GetMenuStateC,{ Hmenu,uID,uFlgs })
+end function
+
+
+global function GetMessage(atom lpMsg,atom Hwnd,atom wMFMin,atom wMFMax)
+    return c_func(GetMessageC,{ lpMsg,Hwnd,wMFMin,wMFMax })
+end function
+
+
+global function GetOpenFileName(atom sOFN)
+    return c_func(GetOpenFileNameC,{ sOFN })
+end function
+
+
+global function GetStockObject(atom a)
+    return c_func(GetStockObjectC,{ a })
+end function
+
+
+global function GetSystemMetrics(atom a)
+    return c_func(GetSystemMetricsC,{ a })
+end function
+
+global function LoadCursor(atom a,atom b)
+    return c_func(LoadCursorC,{ a,b })
+end function
+
+global function LoadIcon(atom a,atom b)
+    return c_func(LoadIconC,{ a,b })
+end function
+
+
+global function PeekMessage(atom lpMsg,atom Hwnd,atom uMFMin,atom uMFMax,atom wRmMsg)
+    return c_func(PeekMessageC,{ lpMsg,Hwnd,uMFMin,uMFMax,wRmMsg })
+end function
+
+
+global function PostMessage(atom Hwnd,atom iMsg,atom wParam,atom lParam)
+    return c_func(PostMessageC,{ Hwnd,iMsg,wParam,lParam })
+end function
+
+
+global procedure PostQuitMessage(atom exitcode)
+    c_proc(PostQuitMessageC,{ exitcode })
+end procedure
+
+
+global function RegisterClassEx(atom pWc)
+    return c_func(RegisterClassExC,{ pWc })
+end function
+
+
+global procedure ReleaseCapture()
+    if c_func(ReleaseCaptureC,{  }) then end if
+end procedure
+
+global function ReleaseDC(atom DC,atom Hwnd)
+    return c_func(ReleaseDCC,{ DC,Hwnd })
+end function
+
+
+export function ReleaseMutex(atom hmutex)
+    return c_func(ReleaseMutexC, {hmutex})
+end function
+
+
+global procedure SendMessage(atom a,atom b,atom c,atom d)
+    if c_func(SendMessageC,{ a,b,c,d }) then end if
+end procedure
+
+
+global function SetCapture(atom Hwnd)
+    return c_func(SetCaptureC,{ Hwnd })
+end function
+
+
+global procedure SetCursor(atom a)
+    if c_func(SetCursorC,{ a }) then end if
+end procedure
+
+
+global procedure SetFocus(atom a)
+    if c_func(SetFocusC,{ a }) then end if
+end procedure
+
+
+global procedure SetMenu(atom Hwnd,atom Hmenu)
+    if c_func(SetMenuC,{ Hwnd,Hmenu }) then end if
+end procedure
+
+
+global function SetPixelFormat(atom DC,atom pf,atom PFD)
+    return c_func(SetPixelFormatC,{ DC,pf,PFD })
+end function
+
+
+global procedure SetThreadPriority(atom a,atom b)
+    if c_func(SetThreadPriorityC,{ a,b }) then end if
+end procedure
+
+
+global function SetWindowPos(atom a,atom b,atom c,atom d,atom e,atom f,atom g)
+    return c_func(SetWindowPosC,{ a,b,c,d,e,f,g })
+end function
+
+
+global procedure SetWindowText(atom hwnd,sequence text)
+    poke(lpcstr,text & 0)
+    if c_func(SetWindowTextC,{ hwnd,lpcstr }) then end if
+end procedure
+
+
+global procedure ShowCursor(atom a)
+    if c_func(ShowCursorC,{a}) then end if
+end procedure
+
+
+global procedure ShowWindow(atom Hwnd,atom SWStyle)
+    c_proc(ShowWindowC,{ Hwnd,SWStyle })
+end procedure
+
+
+global procedure StretchDIBits(sequence s)
+    if c_func(StretchDIBitsC,s) then end if
+end procedure
+
+
+global function SwapBuffers(atom DC)
+    return c_func(SwapBuffersC,{ DC })
+end function
+
+
+global procedure TranslateMessage(atom iMsg)
+    c_proc(TranslateMessageC,{ iMsg })
+end procedure
+
+
+export function WaitForSingleObject(atom hobject, atom timeoutMillis)
+    return c_func(WaitForSingleObjectC, {hobject, timeoutMillis})
+end function
+
+
