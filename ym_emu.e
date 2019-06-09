@@ -139,9 +139,12 @@ function peek4ube(atom addr)
     return bytes_to_int(reverse(peek({addr, 4})))
 end function
 
--- Return the n:th bit of val (0 or 1)
-function nth_bit(integer val, integer n)
-    return and_bits(math:shift_bits(val, n), 1)
+
+-- Return the n:th bit of val (0 or 1).
+-- Specifying a mask allows more than one bit to be obtained.
+-- For example, a mask of 7 would return the n:th, n+1:th and n+2:th bits.
+function nth_bit(integer val, integer n, integer mask = 1)
+    return and_bits(math:shift_bits(val, n), mask)
 end function
 
 
@@ -358,15 +361,7 @@ function start_effect(sequence effect, integer effectNum)
     if effect[EFFECT_CHANNEL] then
         switch effect[EFFECT_TYPE] do
             case SFX_SID_VOICE, SFX_SYNC_BUZZ then
-                integer amplitude = 0
-                switch effect[EFFECT_CHANNEL] do
-                    case 1 then
-                        amplitude = ymRegs[YM_LEVEL_A]
-                    case 2 then
-                        amplitude = ymRegs[YM_LEVEL_B]
-                    case 3 then
-                        amplitude = ymRegs[YM_LEVEL_C]
-                end switch
+                integer amplitude = ymRegs[YM_LEVEL_A + effect[EFFECT_CHANNEL] - 1]
                 amplitude = and_bits(amplitude, 0x0F)
                 if amplitude != effect[EFFECT_AMPLITUDE] then
                     effect[EFFECT_AMPLITUDE] = amplitude
@@ -374,17 +369,11 @@ function start_effect(sequence effect, integer effectNum)
                 end if
 
             case SFX_DIGI_DRUM then
-                switch effect[EFFECT_CHANNEL] do
-                    case 1 then
-                        effect[EFFECT_SAMPLENUM] = ymRegs[YM_LEVEL_A]
-                    case 2 then
-                        effect[EFFECT_SAMPLENUM] = ymRegs[YM_LEVEL_B]
-                    case 3 then
-                        effect[EFFECT_SAMPLENUM] = ymRegs[YM_LEVEL_C]
-                end switch
+                effect[EFFECT_SAMPLENUM] = ymRegs[YM_LEVEL_A + effect[EFFECT_CHANNEL] - 1]
                 effect[EFFECT_SAMPLEPOS] = 0
         end switch
-        effect[EFFECT_TIMER_PERIOD] = TIMER_PRESCALER_TB[floor(ymRegs[6 + (effectNum * 2) + 1] / 32) + 1] * ymRegs[14 + effectNum + 1]
+        integer prescalerSelection = floor(ymRegs[6 + (effectNum * 2) + 1] / 32)
+        effect[EFFECT_TIMER_PERIOD] = TIMER_PRESCALER_TB[prescalerSelection + 1] * ymRegs[14 + effectNum + 1]
     else
         if effect[EFFECT_TYPE] = SFX_DIGI_DRUM then
             -- Don't stop digidrum effects until the end of the sample has been reached
@@ -415,7 +404,7 @@ end procedure
 
 
 export procedure ym_emu_run(integer numSamples, atom buffer)
-    integer outA, outB, outC, smp
+    integer outA, outB, outC
 
     for i = 1 to numSamples do
         if frameCount = YM_FRAME_SAMPLES then
@@ -465,27 +454,27 @@ export procedure ym_emu_run(integer numSamples, atom buffer)
                 -- r3[7:6] selects the type of effect to use for effect 2, and r3[5:4] selects the channel to apply it on.
                 sequence effectCopy = effectOne & effectTwo
                 
-                effectOne[EFFECT_CHANNEL] = and_bits(floor(ymRegs[2] / 0x10), 3)
+                effectOne[EFFECT_CHANNEL] = nth_bit(ymRegs[2], 4, 3)
                 if effectOne[EFFECT_CHANNEL] then
-                    effectOne[EFFECT_TYPE] = and_bits(floor(ymRegs[2] / 0x40), 3)
+                    effectOne[EFFECT_TYPE] = nth_bit(ymRegs[2], 6, 3)
                     effectOne[EFFECT_CHANNEL_STICKY] = effectOne[EFFECT_CHANNEL]
                 end if
                 
-                effectTwo[EFFECT_CHANNEL] = and_bits(floor(ymRegs[4] / 0x10), 3)
+                effectTwo[EFFECT_CHANNEL] = nth_bit(ymRegs[4], 4, 3)
                 if effectTwo[EFFECT_CHANNEL] then
-                    effectTwo[EFFECT_TYPE] = and_bits(floor(ymRegs[4] / 0x40), 3)
+                    effectTwo[EFFECT_TYPE] = nth_bit(ymRegs[4], 6, 3)
                     effectTwo[EFFECT_CHANNEL_STICKY] = effectTwo[EFFECT_CHANNEL]
                 end if
             else
                 -- YM5 and below only support SID-Voice and Digidrum.
                 -- r1,r6,r14 controls the SID-voice effect, and r3,r8,r15 controls the Digidrum effect
-                effectOne[EFFECT_CHANNEL] = and_bits(floor(ymRegs[2] / 0x10), 3)
+                effectOne[EFFECT_CHANNEL] = nth_bit(ymRegs[2], 4, 3)
                 if effectOne[EFFECT_CHANNEL] then
                     effectOne[EFFECT_TYPE] = SFX_SID_VOICE
                     effectOne[EFFECT_CHANNEL_STICKY] = effectOne[EFFECT_CHANNEL]
                 end if
 
-                effectTwo[EFFECT_CHANNEL] = and_bits(floor(ymRegs[4] / 0x10), 3)
+                effectTwo[EFFECT_CHANNEL] = nth_bit(ymRegs[4], 4, 3)
                 if effectTwo[EFFECT_CHANNEL] then
                     if effectTwo[EFFECT_CHANNEL] != effectTwo[EFFECT_CHANNEL_STICKY] and effectTwo[EFFECT_TYPE] = SFX_DIGI_DRUM then
                         digiDrumOverride[effectTwo[EFFECT_CHANNEL_STICKY]] = 0
@@ -537,7 +526,7 @@ export procedure ym_emu_run(integer numSamples, atom buffer)
         if posN >= periodN then
             posN -= periodN
             outN = and_bits(lfsr, 1)
-            lfsr = or_bits(floor(lfsr / 2), xor_bits(outN, and_bits(floor(lfsr / 8), 1)) * 0x10000)
+            lfsr = or_bits(floor(lfsr / 2), xor_bits(outN, nth_bit(lfsr, 3)) * 0x10000)
         end if
 
         if effectOne[EFFECT_TIMER_PERIOD] then
