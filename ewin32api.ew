@@ -477,7 +477,8 @@ global integer GetSystemMetricsC, PeekMessageC, SetCursorC, LoadIconC,
 global integer timeGetTimeC
 
 -- kernel32 routines
-global integer GetTickCountC, CreateMutexC, WaitForSingleObjectC, ReleaseMutexC, CloseHandleC
+global integer GetTickCountC, CreateMutexC, WaitForSingleObjectC, ReleaseMutexC, CloseHandleC,
+               SleepC, GetCurrentThreadIdC, CreateThreadC, CreateEventC, SetEventC
 
 -- gdi32 routines
 global integer CreateFontC
@@ -567,12 +568,17 @@ procedure link_win32_dll_routines()
     CreateFontC = link_c_func(gdi32,"CreateFontA",{ C_INT, C_INT, C_INT, C_INT, C_INT, C_ULONG,
         C_ULONG, C_ULONG, C_ULONG, C_ULONG, C_ULONG, C_ULONG, C_ULONG, C_POINTER}, C_ULONG)
     GetCurrentThreadC = link_c_func(kernel32,"GetCurrentThread",{ },C_UINT)
+    GetCurrentThreadIdC = link_c_func(kernel32,"GetCurrentThreadId",{ },C_UINT)
     SetThreadPriorityC = link_c_func(kernel32,"SetThreadPriority",{ C_UINT,C_INT },C_INT)
     CreateMutexC = link_c_func(kernel32, "CreateMutexA", {C_POINTER, C_INT, C_POINTER}, C_UINT)
     ReleaseMutexC = link_c_func(kernel32, "ReleaseMutex", {C_UINT}, C_INT)
     WaitForSingleObjectC = link_c_func(kernel32, "WaitForSingleObject", {C_UINT, C_UINT}, C_UINT)
+    SleepC = link_c_proc(kernel32, "Sleep", {C_UINT})
     CloseHandleC = link_c_func(kernel32, "CloseHandle", {C_UINT}, C_INT)
-
+    CreateThreadC = link_c_func(kernel32, "CreateThread", {C_POINTER, C_UINT, C_POINTER, C_POINTER, C_UINT, C_POINTER}, C_UINT)
+    CreateEventC = link_c_func(kernel32, "CreateEventA", {C_POINTER, C_INT, C_INT, C_POINTER}, C_UINT)
+    SetEventC = link_c_func(kernel32, "SetEvent", {C_UINT}, C_INT)
+    
 -- 0003: Added functions for OpenGL programming
 
     --USER32 functions
@@ -645,6 +651,11 @@ end function
 
 global function ChoosePixelFormat(atom DC,atom PFD)
     return c_func(ChoosePixelFormatC,{ DC,PFD })
+end function
+
+
+export function CreateEvent(atom attr, integer manualReset, integer initialState, atom lpname)
+    return c_func(CreateEventC, {attr, manualReset, initialState, lpname})
 end function
 
 
@@ -782,6 +793,11 @@ end procedure
 
 global function SetCapture(atom Hwnd)
     return c_func(SetCaptureC,{ Hwnd })
+end function
+
+
+export function SetEvent(atom hevent)
+    return c_func(SetEventC, {hevent})
 end function
 
 

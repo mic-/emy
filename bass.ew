@@ -103,6 +103,7 @@ global constant DSCAPS_SECONDARYSTEREO	= #00000200	-- stereo
 global constant DSCAPS_SECONDARY8BIT	= #00000400	-- 8 bit
 global constant DSCAPS_SECONDARY16BIT	= #00000800	-- 16 bit
 
+export constant BASS_CONFIG_UPDATETHREADS = 24
 
 export constant BASS_SAMPLE_8BITS		= 1	-- 8 bit
 export constant BASS_SAMPLE_FLOAT		= 256	-- 32 bit floating-point
@@ -244,6 +245,7 @@ export integer  BASS_GetVersion,BASS_GetDeviceDescription,BASS_SetBufferLength,
         BASS_Set3DAlgorithm,BASS_ErrorGetCode,BASS_Init,BASS_Free,
         BASS_GetDSoundObject,BASS_GetInfo,BASS_GetCPU,BASS_Start,
         BASS_Stop,BASS_Pause,BASS_SetVolume,BASS_GetVolume,
+        BASS_SetConfig,
 
         -- 3D sound
         BASS_Set3DFactors,BASS_Get3DFactors,BASS_Set3DPosition,
@@ -297,6 +299,8 @@ BASS_Pause = link_c_func(bass, "BASS_Pause",{}, C_INT)
 BASS_GetVolume = link_c_func(bass, "BASS_GetVolume", {}, C_FLOAT)
 BASS_SetVolume = link_c_func(bass, "BASS_SetVolume",{C_FLOAT}, C_INT)
 BASS_GetVersion = link_c_func(bass, "BASS_GetVersion", {}, C_UINT)
+
+BASS_SetConfig = link_c_func(bass, "BASS_SetConfig", {C_UINT, C_UINT}, C_INT)
 
 /* The third argument should the address of a function like this:
    function(atom handle, atom buffer, integer len, atom userData)

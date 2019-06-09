@@ -9,19 +9,15 @@
 include ym_emu.e
 include ewin32api.ew
 include bass.ew
-include std/os.e
 
 constant SONG = "songs/VE2.ym"
 
 enum UNDEFINED, INITED, STARTED, PLAYING
 integer bassState = UNDEFINED
 
-enum REQUESTED, ACKNOWLEDGED
-
 atom ymData = 0
 atom hstream = 0
-atom mutex = 0
-integer quit = 0
+atom quitEvent = 0
 
 
 procedure cleanup()    
@@ -38,10 +34,9 @@ procedure cleanup()
         free(ymData)
         ymData = 0
     end if
-    
-    if mutex then
-        c_func(CloseHandleC, {mutex})
-        mutex = 0
+
+    if quitEvent then
+        c_func(CloseHandleC, {quitEvent})
     end if
 end procedure
 
@@ -87,7 +82,7 @@ end procedure
 procedure start_playback()
     puts(1, "Starting playback.. ")
 
-    mutex = c_func(CreateMutexC, {0, 0, 0})
+    quitEvent = CreateEvent(0, 0, 0, 0)
 
     if not c_func(BASS_Init, {-1, SAMPLE_RATE, BASS_DEVICE_MONO, 0, 0}) then
         error(sprintf("Failed to initialize audio device: error code = %d", c_func(BASS_ErrorGetCode, {})))
@@ -111,16 +106,12 @@ end procedure
 
 
 function streamproc(atom handle, atom buffer, integer bytesToWrite, atom userData)
-    WaitForSingleObject(mutex, 2000)
+    ym_emu_run(floor(bytesToWrite / 2), buffer)
 
-    if quit = REQUESTED then
-        quit = ACKNOWLEDGED
-        ReleaseMutex(mutex)
+    if get_key() != -1 then
+        SetEvent(quitEvent)
         return BASS_STREAMPROC_END
     end if
-
-    ym_emu_run(floor(bytesToWrite / 2), buffer)
-    ReleaseMutex(mutex)
 
     return bytesToWrite
 end function
@@ -134,11 +125,6 @@ start_playback()
 
 puts(1, "Playing " & ymSongAuthor & " - " & ymSongTitle & "\n\nPress any key to quit..")
 
-while quit != ACKNOWLEDGED do
-    if get_key() != -1 then
-        quit = REQUESTED
-    end if
-    os:sleep(0.16)
-end while
+WaitForSingleObject(quitEvent, 0xFFFFFFFF)
 
 cleanup()    
