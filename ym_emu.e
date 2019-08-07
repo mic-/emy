@@ -102,6 +102,7 @@ sequence ymEnvTable
 sequence ymRegs = repeat(0, 16)
 integer frame, numFrames, loopFrame, loopOffs, dataOffs
 sequence effectOne, effectTwo
+sequence sinusSidTable
 integer frameCount
 
 sequence digiDrumPtr
@@ -179,6 +180,15 @@ export procedure ym_emu_init(atom data)
         ymRegStream += sampleBytes
         numDigiDrums -= 1
     end while
+
+    sinusSidTable = repeat({}, 16)
+    sequence sinCurve = {}
+    for n = 0 to 7 do
+        sinCurve &= sin(2.0 * 3.141592654 * n / 8.0) + 1.0
+    end for
+    for vol = 0 to 15 do
+        sinusSidTable[vol+1] = floor(8 * sinCurve * vol/15)
+    end for
 
     ymSongTitle = peek_string(ymRegStream)
     ymRegStream += length(ymSongTitle) + 1
@@ -305,7 +315,7 @@ procedure calc_tone_noise_masks(sequence effect)
     noiseB  = nth_bit(ymRegs[YM_MIXER], 4)
     noiseC  = nth_bit(ymRegs[YM_MIXER], 5)
 
-    if (effect[EFFECT_TYPE] = SFX_DIGI_DRUM) and effect[EFFECT_TIMER_PERIOD] then
+    if effect[EFFECT_TIMER_PERIOD] and (effect[EFFECT_TYPE] = SFX_DIGI_DRUM or effect[EFFECT_TYPE] = SFX_SINUS_SID) then
         switch effect[EFFECT_CHANNEL] do
             case 1 then
                 toneA = 1
@@ -348,6 +358,12 @@ function step_effect(sequence effect)
                     effect[EFFECT_TYPE] = SFX_NONE
                     calc_tone_noise_masks(effect)
                 end if
+
+            case SFX_SINUS_SID then
+                integer sampleByte = sinusSidTable[effect[EFFECT_SAMPLENUM] + 1][and_bits(effect[EFFECT_SAMPLEPOS], 7) + 1]
+                effect[EFFECT_SAMPLEPOS] = and_bits(effect[EFFECT_SAMPLEPOS] + 1, 7)
+                set_level(effect[EFFECT_CHANNEL] - 1, and_bits(sampleByte, 0x0F))
+
             case SFX_SYNC_BUZZ then
                 set_enve_shape(effect[EFFECT_AMPLITUDE])
         end switch
@@ -367,6 +383,9 @@ function start_effect(sequence effect, integer effectNum)
                     effect[EFFECT_AMPLITUDE] = amplitude
                     effect[EFFECT_VALUE] = amplitude
                 end if
+
+            case SFX_SINUS_SID then
+                effect[EFFECT_SAMPLENUM] = and_bits(ymRegs[YM_LEVEL_A + effect[EFFECT_CHANNEL] - 1], 0x0F)
 
             case SFX_DIGI_DRUM then
                 effect[EFFECT_SAMPLENUM] = ymRegs[YM_LEVEL_A + effect[EFFECT_CHANNEL] - 1]

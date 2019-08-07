@@ -10,7 +10,7 @@ include ym_emu.e
 include ewin32api.ew
 include bass.ew
 
-constant SONG = "songs/VE2.ym"
+constant SONG = "songs/DANCER.ym"
 
 enum UNDEFINED, INITED, STARTED, PLAYING
 integer bassState = UNDEFINED
